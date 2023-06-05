@@ -3,13 +3,13 @@ setwd("/home/stefanljubovic/Documents/RVPII/datasets")
 library(sparklyr)
 library(dplyr)
 library(ggplot2)
+library(dbplot)
 library(DBI)
 library(caret)
 
 sc <- spark_connect(master = "local", version = "3.3.2")
 
 spark_get_java()
-
 
 parking_violations_raw <- spark_read_csv(sc, 
                                name = "parking_violations", 
@@ -125,5 +125,41 @@ for (i in 1:k) {
 print(paste("Logistic Regression Mean Accuracy:", mean(accuracies_log_reg)))
 print(paste("SVM Mean Accuracy:", mean(accuracies_svm)))
 print(paste("K-Nearest Neighbors Classifier Mean Accuracy:", mean(accuracies_knn)))
+
+
+#Clusterisation
+
+violations.clusters <- parking_violations %>% 
+  filter(Vehicle_Year > 1960)
+
+clust <- ml_kmeans(violations.clusters, ~ Vehicle_Year + Violation_Code, k=3, max_iter = 10, init_mode = "random")
+
+clust$model$summary$cluster()
+
+ml_evaluate(clust,parking_violations %>% select(Vehicle_Year,Violation_Code))
+
+cluster.centers.df <- data.frame(
+  year = clust$centers$Vehicle_Year,
+  code = clust$centers$Violation_Code
+)
+
+
+#violations.clusters %>%
+  #dbplot_raster(Vehicle_Year,Violation_Code,resolution=20) +
+  #geom_point(data=clust$centers,
+             #mapping=aes(x=Violation_Code,y=Vehicle_Year),color="yellow",size=5,pch="x")
+cluster.values <- clust$model$summary$cluster() %>% collect()
+violations.clusters<- violations.clusters %>% collect()
+violations.clusters$clust <- as.factor(cluster.values$prediction)
+
+ggplot(data = violations.clusters,
+       aes(x = Vehicle_Year, y = Violation_Code, colour = "red")) +
+  geom_jitter(size = 2) +
+  geom_point(data = clust.centers.df,
+             aes(x = year, y = code),
+             color = "brown",
+             size = 4,
+             shape = 15)
+
 
 
