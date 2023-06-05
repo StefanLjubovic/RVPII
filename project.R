@@ -20,7 +20,7 @@ parking_violations_raw <- spark_read_csv(sc,
 
 parking_violations <- parking_violations_raw %>%
   select(Vehicle_Make, Vehicle_Body_Type, Registration_State, Violation_In_Front_Of_Or_Opposite, Plate_Type,Violation_Code
-         ,Vehicle_Year) %>%
+         ,Vehicle_Year, Violation_Location, Law_Section) %>%
   mutate(Vehicle_Year = as.double(Vehicle_Year),
          Violation_Code = as.double(Violation_Code)) %>%
   filter(!is.na(Vehicle_Make) & 
@@ -30,6 +30,8 @@ parking_violations <- parking_violations_raw %>%
            !is.na(Plate_Type) &
            !is.na(Violation_Code) &
            !regexp_replace(Registration_State, "[0-9]", "") != Registration_State &
+           !is.na(Violation_Location) &
+           !is.na(Law_Section) &
            !is.na(Vehicle_Year) &
            Vehicle_Year != 0 )
 
@@ -43,10 +45,11 @@ parking_violations <- parking_violations %>%
 
 
 formula <- Year_Check ~ 
-  Vehicle_Year + 
   Violation_Code +
+  Vehicle_Year +
   Violation_In_Front_Of_Or_Opposite +
-  Registration_State
+  Violation_Location +
+  Law_Section
 
 parking_violations.split <- sdf_random_split(parking_violations, training = 0.75, test = 0.25, seed = 5)
 parking_violations.training <- parking_violations.split$training
@@ -84,13 +87,6 @@ g
 
 
 
-model_formula <- Year_Check ~ 
-                  Registration_State + 
-                  Vehicle_Make + 
-                  Vehicle_Body_Type + 
-                  Violation_In_Front_Of_Or_Opposite +
-                  Violation_Code
-
 # Perform K-fold cross-validation
 k <- 4
 
@@ -109,8 +105,6 @@ violations_partitions <- parking_violations %>%
   sdf_random_split(weights = partition_sizes, seed = 86)
 
 
-summary(parking_violations$Violation_Code)
-
 
 # Perform cross-validation
 for (i in 1:k) {
@@ -120,18 +114,18 @@ for (i in 1:k) {
   test <- violations_partitions[[i]]
   
   # Train and evaluate linear regression
-  log_reg <- ml_logistic_regression(x = training, formula = model_formula, family = "binomial", max_iter = 20, threshold = 0.5)
+  log_reg <- ml_logistic_regression(x = training, formula = formula, family = "binomial", max_iter = 20, threshold = 0.5)
   evaluate_log_reg <- ml_evaluate(log_reg, test)
   accuracies_log_reg[i] <- evaluate_log_reg$accuracy()
   
   
   # Train and evaluate SVM
-  svm <- ml_linear_svc(x = training, formula = model_formula, max_iter = 20, standardization = TRUE)
+  svm <- ml_linear_svc(x = training, formula = formula, max_iter = 20, standardization = TRUE)
   evaluate_svm <- ml_evaluate(svm, test)
   accuracies_svm[i] <- evaluate_svm$Accuracy
   
   # Train and evaluate decision tree classifier
-  dec_tree <- ml_decision_tree_classifier(x = training, formula = model_formula, max_depth = 5, min_instances_per_node = 1000, impurity = "gini")
+  dec_tree <- ml_decision_tree_classifier(x = training, formula = formula, max_depth = 5, min_instances_per_node = 1000, impurity = "gini")
   evaluate_dec_tree <- ml_evaluate(dec_tree, test)
   accuracies_dec_tree[i] <- evaluate_dec_tree$Accuracy
   
