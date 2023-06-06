@@ -126,40 +126,85 @@ print(paste("Logistic Regression Mean Accuracy:", mean(accuracies_log_reg)))
 print(paste("SVM Mean Accuracy:", mean(accuracies_svm)))
 print(paste("K-Nearest Neighbors Classifier Mean Accuracy:", mean(accuracies_knn)))
 
+#Clusterisation1
 
-#Clusterisation
+parking.clusters <- parking_violations %>% 
+  filter(Vehicle_Year >= 2000 & Vehicle_Year<=2005)  %>%
+ group_by(Violation_Code, Vehicle_Year) %>%
+  summarise(Count = n())
 
-violations.clusters <- parking_violations %>% 
-  filter(Vehicle_Year > 1960)
+year.code <- ml_kmeans(
+  parking.clusters,
+  ~ Vehicle_Year + Violation_Code, 
+  k = 5, 
+  max_iter = 10, 
+  init_mode = "k-means||")
 
-clust <- ml_kmeans(violations.clusters, ~ Vehicle_Year + Violation_Code, k=3, max_iter = 10, init_mode = "random")
+year.code
+year.code$model$summary$cluster()
 
-clust$model$summary$cluster()
+ml_evaluate(year.code, parking_violations %>% select(Vehicle_Year , Violation_Code))
 
-ml_evaluate(clust,parking_violations %>% select(Vehicle_Year,Violation_Code))
+cluster.values <- year.code$model$summary$cluster() %>% collect()
+parking.clusters <- parking.clusters %>% collect()
+parking.clusters$clust <- as.factor(cluster.values$prediction)
 
 cluster.centers.df <- data.frame(
-  year = clust$centers$Vehicle_Year,
-  code = clust$centers$Violation_Code
+  year = year.code$centers$Vehicle_Year,
+  code = year.code$centers$Violation_Code
 )
 
-
-#violations.clusters %>%
-  #dbplot_raster(Vehicle_Year,Violation_Code,resolution=20) +
-  #geom_point(data=clust$centers,
-             #mapping=aes(x=Violation_Code,y=Vehicle_Year),color="yellow",size=5,pch="x")
-cluster.values <- clust$model$summary$cluster() %>% collect()
-violations.clusters<- violations.clusters %>% collect()
-violations.clusters$clust <- as.factor(cluster.values$prediction)
-
-ggplot(data = violations.clusters,
-       aes(x = Vehicle_Year, y = Violation_Code, colour = "red")) +
+ggplot(data = parking.clusters,
+       aes(x = Violation_Code, y = Vehicle_Year, colour = clust)) +
   geom_jitter(size = 2) +
-  geom_point(data = clust.centers.df,
-             aes(x = year, y = code),
+  geom_point(data = cluster.centers.df,
+             aes(x = code, y = year),
              color = "brown",
              size = 4,
              shape = 15)
+
+
+#Clusterisation2
+
+
+parking.clusters2 <- parking_violations %>%
+  group_by(Violation_Code, Registration_State) %>%
+  summarise(Registration_State_Sum = n(), .groups = "keep")
+
+
+year.code2 <- ml_kmeans(
+  parking.clusters2,
+  ~ Registration_State_Sum + Violation_Code, 
+  k = 3, 
+  max_iter = 10, 
+  init_mode = "k-means||")
+
+year.code2
+year.code2$model$summary$cluster()
+
+ml_evaluate(year.code2, parking_violations %>% select(Registration_State_Sum , Violation_Code))
+
+cluster.values2 <- year.code2$model$summary$cluster() %>% collect()
+parking.clusters2 <- parking.clusters2 %>% collect()
+parking.clusters2$clust <- as.factor(cluster2.values$prediction)
+
+cluster.centers.df2 <- data.frame(
+  location = year.code2$centers$Registration_State_Sum,
+  code = year.code2$centers$Violation_Code
+)
+
+ggplot(data = parking.clusters2,
+       aes(x = Violation_Code, y = Registration_State_Sum, colour = clust)) +
+  geom_jitter(size = 2) +
+  geom_point(data = cluster.centers.df2,
+             aes(x = code, y = location),
+             color = "brown",
+             size = 4,
+             shape = 15)
+
+
+
+
 
 
 
