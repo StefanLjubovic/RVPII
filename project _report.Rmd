@@ -1,11 +1,59 @@
+---
+title: "project_report"
+author: "Stefan Ljubovic"
+output: html_document
+---
+
+```{r echo=F, warning=F, results="hide"}
+Sys.setlocale("LC_CTYPE", ".1251")
+
 setwd("/home/stefanljubovic/Documents/RVPII/datasets")
 
+```
+
+## Uvod
+
+U izvestaju su prikazani rezultati podataka kazni za parkiranje u NYC-u 
+
+### Skup podataka parking_violations
+
+Glavni izvor podataka za skup podataka 
+**parking_violations**
+NYC departmant za finansije prikuplja podatke kazni za parkiranje ispisane u NYC (otprilike 10M godisnje)
+Internet adresa za pristup podacima:
+https://www.kaggle.com/datasets/new-york-city/nyc-parking-tickets?select=Parking_Violations_Issued_-_Fiscal_Year_2014__August_2013___June_2014_.csv
+
+kolone koriscene u analizi:
+
+
+* Vehicle_Make - Marka kola,
+* Registration_State - gde su kola registrovana
+* Violation_In_Front_Of_Or_Opposite - Vrednosti F i O u zavisnosti da li je pred organom izvrsena krivicna greska
+* Plate_Type - tip tablice
+* Violation_Code - Kod krivicne prijave u zakoniku
+* Vehicle_Year - starost vozila
+* Violation_Location - lokacija krivicne greske
+* Law_Section - Sekcija u zakoniku kojoj pripada Violation_Code
+* People_In_State - sumirano Registration_State da se sabere broj ljudi iz savezne drzave
+* Year_Check- kreirana kolona pomocu koje se odredjuje da li su kola "old" ili "new" u zavisnosti od godinje proizvodnje
+
+## Ucitavanje podataka
+
+Pre pocetka potrebno je ucitati podatke iz CSV fajla pomocu *Apache Spark* alata 
+Nakon toga selektovati kolone za rad, i izbaciti nepostojece vrednosti iz kolona,
+i 0 vrednosti iz Vehicle_Year. Nakon toga kreirati kolonu Year_Check i kreirati model za klasterizacije.
+
+
+
+```{r eval=T, echo=F, warning = F,message=F}
 library(sparklyr)
 library(dplyr)
 library(ggplot2)
 library(dbplot)
 library(DBI)
+library(knitr)
 library(caret)
+
 
 sc <- spark_connect(master = "local", version = "3.3.2")
 
@@ -16,7 +64,7 @@ parking_violations_raw <- spark_read_csv(sc,
                                path = ".", 
                                header = T, 
                                memory = T)
-
+```
 parking_violations <- parking_violations_raw %>%
   select(Vehicle_Make, Registration_State, Violation_In_Front_Of_Or_Opposite, Plate_Type,Violation_Code
          ,Vehicle_Year, Violation_Location, Law_Section) %>%
@@ -70,7 +118,6 @@ for (i in seq_along(it)) {
 }
 
 
-##### Prikaz preciznosti na grafiku
 
 data.frame(i=it,t=tacnost) %>%
   ggplot(aes(i,t)) +
@@ -126,13 +173,20 @@ print(paste("Logistic Regression Mean Accuracy:", mean(accuracies_log_reg)))
 print(paste("SVM Mean Accuracy:", mean(accuracies_svm)))
 print(paste("K-Nearest Neighbors Classifier Mean Accuracy:", mean(accuracies_knn)))
 
+```
+## Klasterizacija
+
+Ovde je prikazan klasterizacija podataka gde se najpre filtriraju i grupisu podaci za obelezja Vehicle_Year i Violation_Code i pomocu algoritma k-means|| se kreiraju tri grupe
+
+```{r eval=T, results='hold'}
+
 #Clusterisation1
 
 parking.clusters <- parking_violations %>% 
   filter(Vehicle_Year >= 2000 & Vehicle_Year<=2005)  %>%
  group_by(Violation_Code, Vehicle_Year) %>%
   summarise(Count = n())
-
+```
 year.code <- ml_kmeans(
   parking.clusters,
   ~ Vehicle_Year + Violation_Code, 
@@ -154,6 +208,14 @@ cluster.centers.df <- data.frame(
   code = year.code$centers$Violation_Code
 )
 
+
+```
+
+#### Vizualizacija
+
+Zatim se kreira grafik gde se na x osi nalaze godista vozila a na y osi koje krivicne greske su vrsili u zavisnosti od godista vozila.
+
+```{r echo=F}
 ggplot(data = parking.clusters,
        aes(x = Violation_Code, y = Vehicle_Year, colour = clust)) +
   geom_jitter(size = 2) +
@@ -163,9 +225,13 @@ ggplot(data = parking.clusters,
              size = 4,
              shape = 15)
 
+```
+### Klasterizacije agregiranih podataka
 
+#### Sprovođenje klasterizacije
+
+U sledecem primeru klasterizacije slicno kao u prvom najpre se agregiraju podaci i kreira se nova kolona koja sadrzi ukupan broj gradjana za datu saveznu drzavu.
 #Clusterisation2
-
 
 parking.clusters2 <- parking_violations %>%
   group_by(Registration_State,Violation_Code) %>%
