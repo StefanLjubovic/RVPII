@@ -1,6 +1,6 @@
 ----------------------------------------------------------------
-Sat Jun 03 21:22:03 CEST 2023:
-Booting Derby version The Apache Software Foundation - Apache Derby - 10.14.2.0 - (1828579): instance a816c00e-0188-82b5-a77c-00001602f400 
+Tue Jun 06 15:17:27 CEST 2023:
+Booting Derby version The Apache Software Foundation - Apache Derby - 10.14.2.0 - (1828579): instance a816c00e-0188-90da-f0ce-000010845108 
 on database directory memory:/home/stefanljubovic/Documents/RVPII/databaseName=metastore_db with class loader jdk.internal.loader.ClassLoaders$AppClassLoader@5ffd2b27 
 Loaded from file:/home/stefanljubovic/spark/spark-3.3.2-bin-hadoop2/jars/derby-10.14.2.0.jar
 java.vendor=Ubuntu
@@ -8,6 +8,6 @@ java.runtime.version=11.0.19+7-post-Ubuntu-0ubuntu122.04.1
 user.dir=/home/stefanljubovic/Documents/RVPII
 os.name=Linux
 os.arch=amd64
-os.version=5.19.0-32-generic
+os.version=5.19.0-43-generic
 derby.system.home=null
 Database Class Loader started - derby.database.classpath=''

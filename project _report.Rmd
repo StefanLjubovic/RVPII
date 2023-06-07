@@ -3,10 +3,13 @@ title: "project_report"
 author: "Stefan Ljubovic"
 output: html_document
 ---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = "/home/stefanljubovic/Documents/RVPII/datasets")
+```
 
 ```{r echo=F, warning=F, results="hide"}
 Sys.setlocale("LC_CTYPE", ".1251")
-
 setwd("/home/stefanljubovic/Documents/RVPII/datasets")
 
 ```
@@ -45,7 +48,7 @@ i 0 vrednosti iz Vehicle_Year. Nakon toga kreirati kolonu Year_Check i kreirati 
 
 
 
-```{r eval=T, echo=F, warning = F,message=F}
+```{r eval=T, results='hold'}
 library(sparklyr)
 library(dplyr)
 library(ggplot2)
@@ -65,6 +68,8 @@ parking_violations_raw <- spark_read_csv(sc,
                                header = T, 
                                memory = T)
 ```
+
+```{r eval=T, results='hold'}
 parking_violations <- parking_violations_raw %>%
   select(Vehicle_Make, Registration_State, Violation_In_Front_Of_Or_Opposite, Plate_Type,Violation_Code
          ,Vehicle_Year, Violation_Location, Law_Section) %>%
@@ -96,16 +101,21 @@ formula <- Year_Check ~
   Violation_In_Front_Of_Or_Opposite +
   Violation_Location +
   Law_Section
-
+```
+#### Deljenje podatataka na test i train dataset
+```{r eval=T, results='hold'}
 parking_violations.split <- sdf_random_split(parking_violations, training = 0.8, test = 0.2, seed = 6)
 parking_violations.training <- parking_violations.split$training
 parking_violations.test <- parking_violations.split$test
+```
 
+#### Treniranje modela
+trenira se vise puta model za razliciti broj iteracija i zatim se prikazuju rezultati
+```{r eval=T, results='hold',warning=FALSE}
 it <- c(1, 2, 5, 8, 10, 20, 50)
 tacnost <-numeric(length(it))
 
 for (i in seq_along(it)) {
-  counter <- counter + 1
   logreg <- ml_logistic_regression(
     x = parking_violations.training,
     formula = formula,
@@ -116,62 +126,61 @@ for (i in seq_along(it)) {
   logreg.perf <- ml_evaluate(logreg,parking_violations.test)
   tacnost[i] <- logreg.perf$accuracy()
 }
+```
+#### Vizuelizacija
 
-
-
+```{r echo=F}
 data.frame(i=it,t=tacnost) %>%
   ggplot(aes(i,t)) +
   geom_line() +
   scale_x_continuous(breaks=it) +
   labs(x="Broj iteracija", y="Tacnost")
+```
 
+### Poređenje performansi klasifikacionih modela različitog tipa
 
-
-
+Izvrsava se klasifikacija modela pomocu tri razlicita algoritma. Najpre se odredjuje vrednost *k* koju postavljamo na 4 kako bi se kreirala 3 skupa za obucavanje i jedan kao validacioni i svaki ce se koristiti kao validacioni u razlicitim iteracijama
+```{r eval=T, results='hold'}
 k <- 4
 
 # Initialize accuracy vectors
 accuracies_log_reg <- c()
 accuracies_svm <- c()
-accuracies_knn <- c()
+accuracies_dec_tree <- c()
 
-# Create partition sizes
-partition_sizes <- rep(1/k, times = k)
-fold_names <- paste0("fold", as.character(1:k))
-names(partition_sizes) <- fold_names
+violations_partitions <- vector("list", length = k)
 
-# Split the dataset into partitions
-violations_partitions <- parking_violations %>%
-  sdf_random_split(weights = partition_sizes, seed = 86)
 
-# Perform cross-validation
+parking_violations.split <- sdf_random_split(parking_violations, first = 0.5, second = 0.5, seed = 6)
+parking_violations.first <- sdf_random_split(parking_violations.split$first, first = 0.5, second = 0.5, seed = 6)
+parking_violations.second <- sdf_random_split(parking_violations.split$second, first = 0.5, second = 0.5, seed = 6)
+violations_partitions[[1]] <- parking_violations.first$first
+violations_partitions[[2]] <- parking_violations.first$second
+violations_partitions[[3]] <- parking_violations.second$first
+violations_partitions[[4]] <- parking_violations.second$second
+
 for (i in 1:k) {
   
-  # Get training and test data
   training <- sdf_bind_rows(violations_partitions[-i])
   test <- violations_partitions[[i]]
-  
-  # Train and evaluate logistic regression
+
   log_reg <- ml_logistic_regression(x = training, formula = formula, family = "binomial", max_iter = 20, threshold = 0.5)
   evaluate_log_reg <- ml_evaluate(log_reg, test)
   accuracies_log_reg[i] <- evaluate_log_reg$accuracy()
   
-  # Train and evaluate SVM
   svm <- ml_linear_svc(x = training, formula = formula, max_iter = 20, standardization = TRUE)
   evaluate_svm <- ml_evaluate(svm, test)
   accuracies_svm[i] <- evaluate_svm$Accuracy
-  
-  # Train and evaluate k-nearest neighbors classifier
-  knn <- ml_knn_classifier(x = training, formula = formula, k = 5)
-  evaluate_knn <- ml_evaluate(knn, test)
-  accuracies_knn[i] <- evaluate_knn$Accuracy
+
+  dec_tree <- ml_decision_tree_classifier(x = training, formula = formula, max_depth = 5, min_instances_per_node = 1000, impurity = "gini")
+  evaluate_dec_tree <- ml_evaluate(dec_tree, test)
+  accuracies_dec_tree[i] <- evaluate_dec_tree$Accuracy
   
 }
 
-# Print the mean accuracy for each model
 print(paste("Logistic Regression Mean Accuracy:", mean(accuracies_log_reg)))
 print(paste("SVM Mean Accuracy:", mean(accuracies_svm)))
-print(paste("K-Nearest Neighbors Classifier Mean Accuracy:", mean(accuracies_knn)))
+print(paste("Decision Tree Classifier Mean Accuracy:", mean(accuracies_dec_tree)))
 
 ```
 ## Klasterizacija
@@ -186,7 +195,7 @@ parking.clusters <- parking_violations %>%
   filter(Vehicle_Year >= 2000 & Vehicle_Year<=2005)  %>%
  group_by(Violation_Code, Vehicle_Year) %>%
   summarise(Count = n())
-```
+
 year.code <- ml_kmeans(
   parking.clusters,
   ~ Vehicle_Year + Violation_Code, 
@@ -231,8 +240,8 @@ ggplot(data = parking.clusters,
 #### Sprovođenje klasterizacije
 
 U sledecem primeru klasterizacije slicno kao u prvom najpre se agregiraju podaci i kreira se nova kolona koja sadrzi ukupan broj gradjana za datu saveznu drzavu.
-#Clusterisation2
-
+# Clusterisation2
+```{r eval=T, results='hold'}
 parking.clusters2 <- parking_violations %>%
   group_by(Registration_State,Violation_Code) %>%
   summarise(People_In_State = n(), .groups = "keep") %>%
@@ -259,7 +268,13 @@ cluster.centers.df2 <- data.frame(
   location = year.code2$centers$People_In_State,
   code = year.code2$centers$Violation_Code
 )
+```
 
+#### Vizualizacija
+
+Zatim se kreira grafik gde se na x osi nalaze godista vozila a na y osi koje krivicne greske su vrsili u zavisnosti od godista vozila.
+
+```{r echo=F}
 ggplot(data = parking.clusters2,
        aes(x = People_In_State, y = Violation_Code, colour = clust)) +
   geom_jitter(size = 2) +
@@ -269,7 +284,7 @@ ggplot(data = parking.clusters2,
              size = 4,
              shape = 15) +
   scale_x_continuous(labels = scales::comma)
-
+```
 
 
 

@@ -79,52 +79,45 @@ data.frame(i=it,t=tacnost) %>%
   labs(x="Broj iteracija", y="Tacnost")
 
 
-
-
 k <- 4
 
-# Initialize accuracy vectors
 accuracies_log_reg <- c()
 accuracies_svm <- c()
-accuracies_knn <- c()
+accuracies_dec_tree <- c()
 
-# Create partition sizes
-partition_sizes <- rep(1/k, times = k)
-fold_names <- paste0("fold", as.character(1:k))
-names(partition_sizes) <- fold_names
+violations_partitions <- vector("list", length = k)
 
-# Split the dataset into partitions
-violations_partitions <- parking_violations %>%
-  sdf_random_split(weights = partition_sizes, seed = 86)
 
-# Perform cross-validation
+parking_violations.split <- sdf_random_split(parking_violations, first = 0.5, second = 0.5, seed = 6)
+parking_violations.first <- sdf_random_split(parking_violations.split$first, first = 0.5, second = 0.5, seed = 6)
+parking_violations.second <- sdf_random_split(parking_violations.split$second, first = 0.5, second = 0.5, seed = 6)
+violations_partitions[[1]] <- parking_violations.first$first
+violations_partitions[[2]] <- parking_violations.first$second
+violations_partitions[[3]] <- parking_violations.second$first
+violations_partitions[[4]] <- parking_violations.second$second
+
 for (i in 1:k) {
   
-  # Get training and test data
   training <- sdf_bind_rows(violations_partitions[-i])
   test <- violations_partitions[[i]]
   
-  # Train and evaluate logistic regression
   log_reg <- ml_logistic_regression(x = training, formula = formula, family = "binomial", max_iter = 20, threshold = 0.5)
   evaluate_log_reg <- ml_evaluate(log_reg, test)
   accuracies_log_reg[i] <- evaluate_log_reg$accuracy()
   
-  # Train and evaluate SVM
   svm <- ml_linear_svc(x = training, formula = formula, max_iter = 20, standardization = TRUE)
   evaluate_svm <- ml_evaluate(svm, test)
   accuracies_svm[i] <- evaluate_svm$Accuracy
   
-  # Train and evaluate k-nearest neighbors classifier
-  knn <- ml_knn_classifier(x = training, formula = formula, k = 5)
-  evaluate_knn <- ml_evaluate(knn, test)
-  accuracies_knn[i] <- evaluate_knn$Accuracy
+  dec_tree <- ml_decision_tree_classifier(x = training, formula = formula, max_depth = 5, min_instances_per_node = 1000, impurity = "gini")
+  evaluate_dec_tree <- ml_evaluate(dec_tree, test)
+  accuracies_dec_tree[i] <- evaluate_dec_tree$Accuracy
   
 }
 
-# Print the mean accuracy for each model
 print(paste("Logistic Regression Mean Accuracy:", mean(accuracies_log_reg)))
 print(paste("SVM Mean Accuracy:", mean(accuracies_svm)))
-print(paste("K-Nearest Neighbors Classifier Mean Accuracy:", mean(accuracies_knn)))
+print(paste("Decision Tree Classifier Mean Accuracy:", mean(accuracies_dec_tree)))
 
 #Clusterisation1
 
